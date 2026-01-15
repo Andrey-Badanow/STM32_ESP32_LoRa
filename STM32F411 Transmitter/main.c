@@ -7,17 +7,33 @@ void led_c13_init(void);
 void set_peripheral_clock(void);
 void uart_init(void);
 
+void uart_send_char(char c) {
+    while(!(USART1->SR & USART_SR_TXE));  
+    USART1->DR = c;
+}
+
+void uart_send_string(const char* str) {
+    while(*str) uart_send_char(*str++);
+}
+
 int main(void)
 {
     set_peripheral_clock();
 	set_96_hse();
 	led_c13_init();
+	uart_init();
     LED_C13_ON();
+	
+	uart_send_string("\r\nUART Test\r\n");
+    uart_send_string("HELLO WORLD, BITCH\r\n");
 		
     while (1){
-    }
+		if(USART1->SR & USART_SR_RXNE) {
+			char received = USART1->DR;
+        	uart_send_char(received);
+    	}
+	}
 }
-
 void set_96_hse(void)
 {
     RCC->APB1ENR |= RCC_APB1ENR_PWREN;
@@ -49,8 +65,8 @@ void set_96_hse(void)
 void set_peripheral_clock(void)
 {
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN; // led_c13
-		RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // uart gpio
-		RCC->APB2ENR |= RCC_APB2ENR_USART1EN; //uart
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // uart gpio
+	RCC->APB2ENR |= RCC_APB2ENR_USART1EN; //uart
 }
 
 void led_c13_init(void)
@@ -68,10 +84,13 @@ void uart_init(void)
 	GPIOA->MODER |= GPIO_MODER_MODER9_1;
 	GPIOA->MODER &= ~GPIO_MODER_MODER10;
 	GPIOA->MODER |= GPIO_MODER_MODER10_1;
+	GPIOA->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED9 | GPIO_OSPEEDR_OSPEED10);
+    GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED9_1 | GPIO_OSPEEDR_OSPEED10_1; 
 	GPIOA->PUPDR &= ~GPIO_PUPDR_PUPD10; 
-	GPIOA->PUPDR |= GPIO_PUPDR_PUPD10_0;    
+	GPIOA->PUPDR |= GPIO_PUPDR_PUPD10_0; 
+	GPIOA->AFR[1] &= ~(GPIO_AFRH_AFSEL9 | GPIO_AFRH_AFSEL10);
 	GPIOA->AFR[1] |= (7 << GPIO_AFRH_AFSEL9_Pos) |
-    	           (7 << GPIO_AFRH_AFSEL10_Pos);
+                 (7 << GPIO_AFRH_AFSEL10_Pos);
 	/*
 	92 000 000 / 115200 = 833,333
 	833,33 / 16 = 52,0833
@@ -79,9 +98,12 @@ void uart_init(void)
 	frac = 0,0833 * 16 = 1,33 ~ 1
 	*/
 	USART1->BRR = (52 << 4) | (1 << 0); 
-	USART1->CR1 |= 
-			(1 << USART_CR1_RE_Pos) |
-			(1 << USART_CR1_TE_Pos) |
-			(1 << USART_CR1_RXNEIE_Pos) |
-			(1 << USART_CR1_UE_Pos);
+		
+	volatile uint32_t temp = USART1->SR;
+    temp = USART1->DR;  
+    (void)temp;
+	
+	USART1->CR1 = 0;
+	USART1->CR1 = USART_CR1_RE | USART_CR1_TE; 
+	USART1->CR1 |= USART_CR1_UE; 
 }
